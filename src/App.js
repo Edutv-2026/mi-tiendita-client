@@ -3,7 +3,8 @@ import axios from 'axios';
 import io from 'socket.io-client';
 import Navbar from "./components/Navbar";
 
-const socket = io('http://localhost:5000');
+// Cambiamos el socket para que apunte a Render también
+const socket = io('https://mi-tiendita-776m.onrender.com');
 
 function App() {
   // --- ESTADOS DE SESIÓN ---
@@ -21,7 +22,7 @@ function App() {
   const [view, setView] = useState('dashboard');
   const [stats, setStats] = useState({ total_productos: 0, valor_inventario: 0, bajo_stock: 0 });
   const [productos, setProductos] = useState([]);
-  const [logs, setLogs] = useState([]); // REQUISITO: Auditoría (Aquí se usa ahora)
+  const [logs, setLogs] = useState([]); 
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(false);
   const [filtroBajo, setFiltroBajo] = useState(false);
@@ -29,7 +30,7 @@ function App() {
   const [nuevoProd, setNuevoProd] = useState({ n: '', s: '', p: '', f: null });
   const [onlineUsers, setOnlineUsers] = useState([]);
 
-  // Instancia de API con Token JWT
+  // --- INSTANCIA DE API (CORREGIDA PARA RENDER) ---
   const api = useMemo(() => axios.create({
     baseURL: 'https://mi-tiendita-776m.onrender.com/api',
     headers: { Authorization: `Bearer ${token}` }
@@ -65,10 +66,9 @@ function App() {
       setStats(resS.data);
       setProductos(resP.data);
       
-      // Si eres Super Usuario, cargamos los Logs de Auditoría
       if (usuario === 'Eduardo Mtz' || userRole === 'superadmin') {
           const resL = await api.get('/logs');
-          setLogs(resL.data); // <--- AQUÍ SE ASIGNA Y QUITA EL WARNING
+          setLogs(resL.data); 
       }
     } catch (e) { if (e.response?.status === 401) handleLogout(); }
     finally { setLoading(false); }
@@ -76,9 +76,10 @@ function App() {
 
   useEffect(() => { cargarDatos(); }, [cargarDatos]);
 
+  // --- LOGIN CORREGIDO (YA NO USA LOCALHOST) ---
   const login = async () => {
     try {
-      const res = await axios.post('http://localhost:5000/api/login', { usuario: cred.u, clave: cred.p });
+      const res = await api.post('/login', { usuario: cred.u, clave: cred.p });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('role', res.data.rol);
       localStorage.setItem('user', res.data.user);
@@ -86,16 +87,20 @@ function App() {
       setUserRole(res.data.rol);
       setUsuario(res.data.user);
       setIsLoggedIn(true);
-    } catch (e) { alert("Credenciales incorrectas"); }
+    } catch (e) { alert("Usuario o clave incorrectos en el servidor real"); }
   };
 
+  // --- REGISTER CORREGIDO (YA NO USA LOCALHOST) ---
   const registrar = async () => {
     try {
-      await axios.post('http://localhost:5000/api/register', { 
+      await api.post('/register', { 
         usuario: cred.u, email: cred.e, telefono: cred.t, clave: cred.p, rol: nuevoRol, codigoAdmin: cred.code 
       });
-      alert("¡Usuario creado!"); setAuthMode('login');
-    } catch (e) { alert("Error: " + (e.response?.data?.error || "Revisa la terminal")); }
+      alert("¡Usuario creado con éxito en la nube!"); 
+      setAuthMode('login');
+    } catch (e) { 
+      alert("Error: " + (e.response?.data?.error || "Error al conectar con Render")); 
+    }
   };
 
   const expulsar = async (target) => {
@@ -106,22 +111,25 @@ function App() {
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-[#bdc3c7] flex items-center justify-center p-4 text-white">
-        <div className="bg-[#2d333b] p-10 rounded-[40px] shadow-2xl w-full max-w-sm border border-gray-700">
+        <div className="bg-[#2d333b] p-10 rounded-[40px] shadow-2xl w-full max-w-sm border border-gray-700 font-sans">
           <h2 className="text-3xl font-black text-center mb-6 uppercase italic tracking-tighter">Mi Tiendita Pro</h2>
           <div className="space-y-3">
-            <input className="w-full bg-[#444c56] p-4 rounded-2xl outline-none" placeholder="Usuario" onChange={e => setCred({...cred, u: e.target.value})} />
+            {authMode !== 'recovery' && <input className="w-full bg-[#444c56] p-4 rounded-2xl outline-none" placeholder="Usuario" onChange={e => setCred({...cred, u: e.target.value})} />}
             {authMode === 'register' && (
               <>
                 <input className="w-full bg-[#444c56] p-4 rounded-2xl outline-none" placeholder="Email" onChange={e => setCred({...cred, e: e.target.value})} />
-                <select className="w-full bg-[#444c56] p-4 rounded-2xl outline-none" value={nuevoRol} onChange={e => setNuevoRol(e.target.value)}>
+                <select className="w-full bg-[#444c56] p-4 rounded-2xl outline-none cursor-pointer" value={nuevoRol} onChange={e => setNuevoRol(e.target.value)}>
                    <option value="user">Vendedor</option>
                    <option value="admin">Administrador</option>
                 </select>
-                {nuevoRol === 'admin' && <input className="w-full bg-red-900/20 p-4 rounded-2xl border border-red-500 outline-none" placeholder="CÓDIGO ADMIN: Edutv" onChange={e => setCred({...cred, code: e.target.value})} />}
+                {nuevoRol === 'admin' && <input className="w-full bg-red-900/20 p-4 rounded-2xl border border-red-500 outline-none font-bold" placeholder="CÓDIGO ADMIN: Edutv" onChange={e => setCred({...cred, code: e.target.value})} />}
               </>
             )}
             <input type="password" title="pass" className="w-full bg-[#444c56] p-4 rounded-2xl outline-none" placeholder="Contraseña" onChange={e => setCred({...cred, p: e.target.value})} />
-            <button className="w-full bg-[#00c984] text-[#1e293b] font-black py-4 rounded-3xl text-lg uppercase transition active:scale-95" onClick={authMode === 'login' ? login : registrar}>{authMode}</button>
+            <button className="w-full bg-[#00c984] text-[#1e293b] font-black py-4 rounded-3xl text-lg uppercase transition active:scale-95 shadow-lg" 
+              onClick={authMode === 'login' ? login : registrar}>
+              {authMode}
+            </button>
             <p className="text-[10px] text-center text-gray-400 font-bold uppercase cursor-pointer" onClick={() => setAuthMode(authMode==='login'?'register':'login')}>{authMode==='login'?'Crear Cuenta':'Regresar'}</p>
           </div>
         </div>
@@ -140,7 +148,7 @@ function App() {
         
         {/* PANEL SUPERUSUARIO (AUDITORÍA + MULTISESIÓN) */}
         {(usuario === 'Eduardo Mtz' || userRole === 'superadmin') && (
-          <div className="space-y-6 mb-12 animate-in slide-in-from-top duration-700">
+          <div className="space-y-6 mb-12 animate-in slide-in-from-top duration-700 font-sans">
             <div className="p-8 bg-[#1e293b] rounded-[50px] text-white shadow-2xl border-b-8 border-[#00c984]">
                 <h3 className="text-xl font-black uppercase mb-6 text-[#00c984] italic">Super Monitor (Sesiones)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -153,10 +161,9 @@ function App() {
                 </div>
             </div>
 
-            {/* TABLA DE AUDITORÍA: AQUÍ SE USA 'logs' Y SE QUITA EL WARNING */}
             <div className="p-8 bg-white rounded-[50px] border shadow-xl overflow-hidden">
                 <h3 className="text-sm font-black uppercase mb-4 text-slate-400 italic">Auditoría del Sistema (Logs)</h3>
-                <div className="max-h-40 overflow-y-auto space-y-2 pr-4 scrollbar-hide text-[10px]">
+                <div className="max-h-40 overflow-y-auto space-y-2 pr-4 text-[10px]">
                     {logs.map(log => (
                         <div key={log.id} className="flex justify-between border-b border-slate-50 pb-2">
                             <span className="font-bold text-slate-700">[{log.usuario}] - {log.accion}</span>
@@ -185,7 +192,7 @@ function App() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center font-sans">
               <h2 className="text-2xl font-black uppercase tracking-tighter italic">{busqueda ? `Coincidencias: ${busqueda}` : "Inventario"}</h2>
               <button onClick={() => setShowForm(!showForm)} className="bg-[#1e293b] text-white px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-lg"> {showForm ? 'Cerrar' : '+ Agregar'} </button>
             </div>
@@ -204,7 +211,7 @@ function App() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
               {filtrados.map(p => (
                 <div key={p.id} className="bg-white p-4 md:p-6 rounded-[30px] md:rounded-[40px] shadow-xl border border-gray-100 text-center relative group">
-                  <img src={p.imagen ? `http://localhost:5000/uploads/${p.imagen}` : 'https://via.placeholder.com/150'} className="w-full h-32 md:h-40 object-cover rounded-3xl mb-4 shadow-sm" alt="p" />
+                  <img src={p.imagen ? `https://mi-tiendita-776m.onrender.com/uploads/${p.imagen}` : 'https://via.placeholder.com/150'} className="w-full h-32 md:h-40 object-cover rounded-3xl mb-4 shadow-sm" alt="p" />
                   <h3 className="font-black uppercase text-[10px] md:text-sm mb-1 line-clamp-1">{p.nombre}</h3>
                   <p className="text-green-600 font-black text-xl md:text-2xl">${p.precio_venta}</p>
                   {(userRole === 'admin' || usuario === 'Eduardo Mtz') && (
